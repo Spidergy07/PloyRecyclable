@@ -1,55 +1,49 @@
 import streamlit as st
+from PIL import Image
 import torch
 from torchvision import models, transforms
-from PIL import Image
-import cv2
-import numpy as np
-import requests
-import os
 
-model_path = 'resnet50.pth'
+# โหลดโมเดลที่เทรนไว้แล้ว
+@st.cache_resource
+def load_model():
+    model = models.resnet50()
+    model.fc = torch.nn.Linear(model.fc.in_features, 5)  # เปลี่ยน output layer สำหรับ 5 คลาส
+    model.load_state_dict(torch.load("resnet50.pth", map_location=torch.device('cpu')))
+    model.eval()
+    return model
 
-# โหลดโมเดล
-model = models.resnet50(pretrained=False)
-model.fc = torch.nn.Linear(model.fc.in_features, 5)  # ปรับจำนวนคลาสให้ตรงกับโมเดลของคุณ
-model.load_state_dict(torch.load(model_path))
-model.eval()
-
-# กำหนด transformation
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-])
-
-# ฟังก์ชันสำหรับทำ inference
-def predict(image):
-    image = transform(image).unsqueeze(0)
+# ฟังก์ชันสำหรับการพยากรณ์
+def predict(image, model):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    img = transform(image).unsqueeze(0)  # เพิ่ม batch dimension
     with torch.no_grad():
-        outputs = model(image)
-    _, predicted = torch.max(outputs, 1)
+        outputs = model(img)
+    _, predicted = outputs.max(1)
     return predicted.item()
 
-# Map index to class name
-class_names = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5']  # แทนที่ด้วยชื่อคลาสของคุณ
+# ชื่อคลาส (แก้ไขให้ตรงกับคลาสของคุณ)
+class_names = ['คลาสที่ 1', 'คลาสที่ 2', 'คลาสที่ 3', 'คลาสที่ 4', 'คลาสที่ 5']
 
-# Streamlit UI
-st.title("Object Detection with ResNet50")
-run = st.checkbox('Run')
+# สร้าง Streamlit app
+st.title("Image Classification with ResNet50")
 
-FRAME_WINDOW = st.image([])
+# ตัวอัปโหลดไฟล์สำหรับอัปโหลดรูปภาพ
+uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
 
-cap = cv2.VideoCapture(0)
-
-while run:
-    ret, frame = cap.read()
-    if not ret:
-        break
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    image = Image.fromarray(frame)
-    prediction = predict(image)
-    label = class_names[prediction]
-    cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-    FRAME_WINDOW.image(frame)
-
-cap.release()
+if uploaded_file is not None:
+    # แสดงรูปภาพที่อัปโหลด
+    image = Image.open(uploaded_file)
+    st.image(image, caption='Uploaded Image', use_column_width=True)
+    
+    # โหลดโมเดล
+    model = load_model()
+    
+    # ทำนายผล
+    class_id = predict(image, model)
+    
+    # แสดงผลลัพธ์
+    st.write(f"Predicted class: {class_names[class_id]}")
