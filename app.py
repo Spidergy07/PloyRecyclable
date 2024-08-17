@@ -5,6 +5,7 @@ from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
 import numpy as np
+import cv2
 import time
 
 class ResNet50(nn.Module):
@@ -13,7 +14,7 @@ class ResNet50(nn.Module):
         self.transform = torchvision.models.ResNet50_Weights.IMAGENET1K_V2.transforms()
         self.resnet = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
         self.resnet.fc = nn.Linear(in_features=2048, out_features=101)
-    
+        
     def forward(self, x):
         x = self.resnet(x)
         return x
@@ -42,27 +43,25 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# เริ่มต้น session state สำหรับเก็บภาพ
-if 'image' not in st.session_state:
-    st.session_state.image = None
+# เริ่มสตรีมวิดีโอ
+video_stream = st.empty()
 
-# ใช้ Streamlit's camera input สำหรับจับภาพจากกล้อง
-image = st.camera_input("ถ่ายภาพ")
+# สร้าง placeholder สำหรับแสดงผลการคาดการณ์
+prediction_text = st.empty()
 
-if image:
-    # อัปเดต session state ด้วยภาพใหม่
-    st.session_state.image = image
+# เริ่มการจับภาพวิดีโอ
+cap = cv2.VideoCapture(0)
 
-# ประมวลผลและจำแนกประเภทภาพที่จับได้หากมีภาพ
-if st.session_state.image:
-    # แปลงภาพเป็น NumPy array
-    image_np = np.array(Image.open(st.session_state.image))
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
     
-    # แสดงภาพที่จับได้
-    st.image(image_np, caption='ภาพที่จับได้', use_column_width=True)
+    # แปลง BGR เป็น RGB
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
     # ประมวลผลภาพ
-    input_tensor = preprocess_image(image_np)
+    input_tensor = preprocess_image(frame_rgb)
     
     # ทำการคาดการณ์
     with torch.no_grad():
@@ -72,8 +71,18 @@ if st.session_state.image:
     # รับ label ที่คาดการณ์
     predicted_label = class_labels[predicted_class.item()]
     
-    # แสดงผลลัพธ์
-    st.success(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
+    # วาดข้อความบนเฟรม
+    cv2.putText(frame, f'Class: {predicted_class.item()} - {predicted_label}', (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    
+    # แสดงเฟรมในสตรีมวิดีโอ
+    video_stream.image(frame, channels="BGR")
+    
+    # อัปเดตข้อความการคาดการณ์
+    prediction_text.text(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
+    
+    # รอสักครู่เพื่อลดการใช้ทรัพยากร
+    time.sleep(0.1)
 
-# รีเฟรชหน้าเพื่อเช็คภาพใหม่ ๆ ทุกๆ 2 วินาที
-time.sleep(2)
+# ปิดการจับภาพเมื่อเสร็จสิ้น
+cap.release()
