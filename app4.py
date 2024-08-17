@@ -1,11 +1,10 @@
 import streamlit as st
-import cv2
-import numpy as np
-from PIL import Image
 import torch
 import torchvision
 from torchvision import transforms
+from PIL import Image
 import torch.nn as nn
+import numpy as np
 
 # Define the model
 class ResNet50(nn.Module):
@@ -43,51 +42,26 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Initialize session state for webcam control
-if 'webcam_started' not in st.session_state:
-    st.session_state.webcam_started = False
+# Capture image from webcam
+image = st.camera_input("Capture Image")
 
-# Button to start webcam
-if st.button("Start Webcam", key="start_webcam"):
-    st.session_state.webcam_started = True
-
-# Button to stop webcam
-if st.button("Stop Webcam", key="stop_webcam"):
-    st.session_state.webcam_started = False
-
-if st.session_state.webcam_started:
-    cap = cv2.VideoCapture(0)
-    stframe = st.empty()
-    prediction_placeholder = st.empty()
-
-    while st.session_state.webcam_started:
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Failed to capture image from webcam.")
-            break
-        
-        # Convert BGR to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Convert the image to a PIL Image
-        pil_image = Image.fromarray(rgb_frame)
-        
-        # Preprocess the frame for model input
-        input_tensor = preprocess_image(pil_image)
-        
-        # Make prediction
-        with torch.no_grad():
-            prediction = model(input_tensor.to(device))
-            _, predicted_class = torch.max(prediction, 1)
-        
-        # Get the predicted label
-        predicted_label = class_labels[predicted_class.item()]
-        
-        # Display the video frame
-        stframe.image(pil_image, channels="RGB", use_column_width=True)
-        
-        # Display the prediction with label
-        prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+if image:
+    # Convert to PIL Image
+    pil_image = Image.open(image)
     
-    cap.release()
-    cv2.destroyAllWindows()
+    # Display the captured image
+    st.image(pil_image, caption='Captured Image', use_column_width=True)
+    
+    # Preprocess the image for model input
+    input_tensor = preprocess_image(pil_image)
+    
+    # Make prediction
+    with torch.no_grad():
+        prediction = model(input_tensor.to(device))
+        _, predicted_class = torch.max(prediction, 1)
+    
+    # Get the predicted label
+    predicted_label = class_labels[predicted_class.item()]
+    
+    # Display the prediction with label
+    st.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
