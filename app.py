@@ -41,7 +41,7 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# ใช้ streamlit เพื่อนำเข้าภาพจากกล้องเว็บแคม
+# ใช้ Streamlit สำหรับนำเข้าภาพจากกล้องเว็บแคม
 image = st.camera_input("Take a picture")
 
 if image:
