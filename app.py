@@ -1,5 +1,4 @@
 import streamlit as st
-import cv2
 import torch
 import torchvision
 from torchvision import transforms
@@ -33,7 +32,6 @@ def preprocess_image(image, input_height=224, input_width=224):
         transforms.Resize((input_height, input_width)),
         transforms.ToTensor(),
     ])
-    image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     tensor = transform(image).unsqueeze(0)
     return tensor
 
@@ -47,28 +45,22 @@ class VideoTransformer(VideoTransformerBase):
         self.device = device
 
     def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
+        img = frame.to_ndarray(format="rgb24")
+        pil_image = Image.fromarray(img)
         
-        # ประมวลผลภาพ
-        input_tensor = preprocess_image(img)
+        input_tensor = preprocess_image(pil_image)
         
-        # ทำการคาดการณ์
         with torch.no_grad():
             prediction = self.model(input_tensor.to(self.device))
             _, predicted_class = torch.max(prediction, 1)
         
-        # รับ label ที่คาดการณ์
         predicted_label = class_labels[predicted_class.item()]
         
-        # วาดข้อความบนเฟรม
-        cv2.putText(img, f'Class: {predicted_class.item()} - {predicted_label}', (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        return img
+        return img, predicted_label
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-webrtc_ctx = webrtc_streamer(
+ctx = webrtc_streamer(
     key="example",
     video_transformer_factory=VideoTransformer,
     rtc_configuration=RTCConfiguration(
@@ -76,5 +68,11 @@ webrtc_ctx = webrtc_streamer(
     )
 )
 
-if webrtc_ctx.video_transformer:
-    st.write("กำลังตรวจจับ... (หากไม่เห็นภาพ กรุณาตรวจสอบการอนุญาตการใช้กล้องในเบราว์เซอร์ของคุณ)")
+if ctx.video_transformer:
+    prediction_placeholder = st.empty()
+    while True:
+        try:
+            _, prediction = ctx.video_transformer.transform(ctx.video_frame)
+            prediction_placeholder.write(f"ผลการทำนาย: {prediction}")
+        except:
+            continue
