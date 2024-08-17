@@ -42,27 +42,32 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Start capturing video
-cap = cv2.VideoCapture(0)
-stframe = st.empty()
+# Button to start webcam
+start_button = st.button("Start Webcam", key="start_button")
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        st.error("Failed to capture video")
-        break
+if start_button:
+    cap = cv2.VideoCapture(0)
+    video_placeholder = st.empty()
+    prediction_placeholder = st.empty()
 
-    # Convert BGR to RGB
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    # Display the video frame in real-time
-    stframe.image(rgb_frame, channels="RGB", use_column_width=True)
-
-    # Capture a frame when the "Capture" button is pressed
-    if st.button("Capture Frame"):
+    stop_button = st.button("Stop Webcam", key="stop_button")
+    
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            st.error("Failed to capture image from webcam.")
+            break
+        
+        # Convert BGR to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Convert the image to a PIL Image
         pil_image = Image.fromarray(rgb_frame)
         
-        # Preprocess the image
+        # Display the video frame
+        video_placeholder.image(pil_image, channels="RGB", use_column_width=True)
+        
+        # Preprocess the frame for model input
         input_tensor = preprocess_image(pil_image)
         
         # Make prediction
@@ -74,6 +79,11 @@ while True:
         predicted_label = class_labels[predicted_class.item()]
         
         # Display the prediction with label
-        st.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
-
-cap.release()
+        prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+        
+        # Stop webcam when button is pressed
+        if stop_button:
+            break
+    
+    cap.release()
+    cv2.destroyAllWindows()

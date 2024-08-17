@@ -45,15 +45,14 @@ st.title('การแยกประเภทขยะรีไซเคิล�
 # Button to start webcam
 start_button = st.button("Start Webcam", key="start_button")
 
-# Button to stop webcam
-stop_button = st.button("Stop Webcam", key="stop_button")
-
 if start_button:
     cap = cv2.VideoCapture(0)
     video_placeholder = st.empty()
     prediction_placeholder = st.empty()
 
-    while True:
+    stop_button = st.button("Stop Webcam", key="stop_button")
+    
+    while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             st.error("Failed to capture image from webcam.")
@@ -68,7 +67,7 @@ if start_button:
         # Display the video frame
         video_placeholder.image(pil_image, channels="RGB", use_column_width=True)
         
-        # Preprocess the frame
+        # Preprocess the frame for model input
         input_tensor = preprocess_image(pil_image)
         
         # Make prediction
@@ -82,14 +81,9 @@ if start_button:
         # Display the prediction with label
         prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
         
-        # Break loop if stop button is pressed
+        # Stop webcam when button is pressed
         if stop_button:
-            cap.release()
             break
-
-    if not stop_button:
-        cap.release()
-
-# Release the webcam when the application exits or when the stop button is pressed
-if cap.isOpened():
+    
     cap.release()
+    cv2.destroyAllWindows()
