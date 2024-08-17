@@ -5,8 +5,9 @@ from PIL import Image
 import cv2
 import numpy as np
 
-# โหลดโมเดล ResNet50 แบบ pretrained
-model = models.resnet50(pretrained=True)
+# โหลดโมเดล ResNet50 จากไฟล์ที่ดาวน์โหลดไว้แล้ว
+model = models.resnet50()
+model.load_state_dict(torch.load("resnet50.pth"))
 model.eval()
 
 # การเตรียมข้อมูลก่อนป้อนให้โมเดล
