@@ -51,44 +51,48 @@ prediction_placeholder = st.empty()
 cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
-    st.error("Unable to access the webcam.")
+    st.error("Unable to access the webcam. Please check your webcam connection.")
 else:
-    st.write("Webcam is connected.")
+    st.write("Webcam is connected. Click 'Start Webcam' to begin.")
 
-# Create a stop button
-stop_button = st.button("Stop Webcam")
+# Create a start button
+start_button = st.button("Start Webcam")
 
-while not stop_button:
-    ret, frame = cap.read()
-    if not ret:
-        st.error("Failed to capture image from webcam.")
-        break
-
-    # Convert BGR to RGB
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    # Convert the image to a PIL Image
-    pil_image = Image.fromarray(rgb_frame)
-
-    # Display the video frame
-    video_placeholder.image(pil_image, caption='Webcam Feed', use_column_width=True)
-
-    # Preprocess the frame for model input
-    input_tensor = preprocess_image(pil_image)
-
-    # Make prediction
-    with torch.no_grad():
-        prediction = model(input_tensor.to(device))
-        _, predicted_class = torch.max(prediction, 1)
-
-    # Get the predicted label
-    predicted_label = class_labels[predicted_class.item()]
-
-    # Display the prediction with label
-    prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
-    
-    # Check for stop button
+if start_button:
+    # Create a stop button
     stop_button = st.button("Stop Webcam")
+    
+    while not stop_button:
+        ret, frame = cap.read()
+        if not ret:
+            st.error("Failed to capture image from webcam.")
+            break
+        
+        # Convert BGR to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Convert the image to a PIL Image
+        pil_image = Image.fromarray(rgb_frame)
+        
+        # Display the video frame
+        video_placeholder.image(pil_image, caption='Webcam Feed', use_column_width=True)
+        
+        # Preprocess the frame for model input
+        input_tensor = preprocess_image(pil_image)
+        
+        # Make prediction
+        with torch.no_grad():
+            prediction = model(input_tensor.to(device))
+            _, predicted_class = torch.max(prediction, 1)
+        
+        # Get the predicted label
+        predicted_label = class_labels[predicted_class.item()]
+        
+        # Display the prediction with label
+        prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+        
+        # Check for stop button
+        stop_button = st.button("Stop Webcam")
 
 cap.release()
 cv2.destroyAllWindows()
