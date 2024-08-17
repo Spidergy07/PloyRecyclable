@@ -6,6 +6,7 @@ from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
 import numpy as np
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 
 class ResNet50(nn.Module):
     def __init__(self):
@@ -40,41 +41,40 @@ class_labels = ["กระดาษ ราคา/กก. 1-4 บาท", "ขว
 
 model, device = load_model()
 
+class VideoTransformer(VideoTransformerBase):
+    def __init__(self):
+        self.model = model
+        self.device = device
+
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        
+        # ประมวลผลภาพ
+        input_tensor = preprocess_image(img)
+        
+        # ทำการคาดการณ์
+        with torch.no_grad():
+            prediction = self.model(input_tensor.to(self.device))
+            _, predicted_class = torch.max(prediction, 1)
+        
+        # รับ label ที่คาดการณ์
+        predicted_label = class_labels[predicted_class.item()]
+        
+        # วาดข้อความบนเฟรม
+        cv2.putText(img, f'Class: {predicted_class.item()} - {predicted_label}', (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        return img
+
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# สร้าง placeholder สำหรับแสดงวิดีโอและผลการทำนาย
-video_placeholder = st.empty()
-prediction_placeholder = st.empty()
+webrtc_ctx = webrtc_streamer(
+    key="example",
+    video_transformer_factory=VideoTransformer,
+    rtc_configuration=RTCConfiguration(
+        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    )
+)
 
-# เริ่มการจับภาพวิดีโอ
-cap = cv2.VideoCapture(0)
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        st.write("ไม่สามารถเข้าถึงกล้องได้")
-        break
-    
-    # ประมวลผลภาพ
-    input_tensor = preprocess_image(frame)
-    
-    # ทำการคาดการณ์
-    with torch.no_grad():
-        prediction = model(input_tensor.to(device))
-        _, predicted_class = torch.max(prediction, 1)
-    
-    # รับ label ที่คาดการณ์
-    predicted_label = class_labels[predicted_class.item()]
-    
-    # วาดข้อความบนเฟรม
-    cv2.putText(frame, f'Class: {predicted_class.item()} - {predicted_label}', (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    
-    # แสดงเฟรมในสตรีมวิดีโอ
-    video_placeholder.image(frame, channels="BGR")
-    
-    # อัปเดตข้อความการคาดการณ์
-    prediction_placeholder.text(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
-
-# ปิดการจับภาพเมื่อเสร็จสิ้น
-cap.release()
+if webrtc_ctx.video_transformer:
+    st.write("กำลังตรวจจับ... (หากไม่เห็นภาพ กรุณาตรวจสอบการอนุญาตการใช้กล้องในเบราว์เซอร์ของคุณ)")
