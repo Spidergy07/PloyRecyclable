@@ -44,18 +44,20 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Create a temporary file to store the video
-tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-video_path = tfile.name
-
-# Start capturing video
-cap = cv2.VideoCapture(0)
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-out = cv2.VideoWriter(video_path, fourcc, 20.0, (640, 480))
-
-stframe = st.empty()
+# Create an empty placeholder
+video_placeholder = st.empty()
 prediction_placeholder = st.empty()
 
+# Initialize the webcam
+cap = cv2.VideoCapture(0)
+
+# Check if the webcam is opened successfully
+if not cap.isOpened():
+    st.error("Unable to access the webcam.")
+else:
+    st.write("Webcam is connected.")
+
+# Create a stop button
 stop_button = st.button("Stop Webcam")
 
 while not stop_button:
@@ -63,36 +65,31 @@ while not stop_button:
     if not ret:
         st.error("Failed to capture image from webcam.")
         break
-
-    # Write the frame into the video file
-    out.write(frame)
-
+    
     # Convert BGR to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
+    
     # Convert the image to a PIL Image
     pil_image = Image.fromarray(rgb_frame)
-
+    
+    # Display the video frame
+    video_placeholder.image(pil_image, caption='Webcam Feed', use_column_width=True)
+    
     # Preprocess the frame for model input
     input_tensor = preprocess_image(pil_image)
-
+    
     # Make prediction
     with torch.no_grad():
         prediction = model(input_tensor.to(device))
         _, predicted_class = torch.max(prediction, 1)
-
+    
     # Get the predicted label
     predicted_label = class_labels[predicted_class.item()]
-
-    # Display the video frame
-    stframe.image(pil_image, caption=f'Predicted class: {predicted_class.item()} - {predicted_label}', use_column_width=True)
-
-    # Check for stop button
-    if st.button("Stop Webcam"):
-        break
+    
+    # Display the prediction with label
+    prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+    
+    # Update stop button
+    stop_button = st.button("Stop Webcam")
 
 cap.release()
-out.release()
-
-# Display the recorded video
-st.video(video_path)
