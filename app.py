@@ -1,64 +1,87 @@
 import streamlit as st
 import torch
-from torchvision import models, transforms
+import torchvision
+from torchvision import transforms
 from PIL import Image
+import torch.nn as nn
 import cv2
 import numpy as np
 
-# โหลดโมเดล ResNet50 จากไฟล์ที่ดาวน์โหลดไว้แล้ว
-model = models.resnet50()
-model.load_state_dict(torch.load("resnet50.pth"))
-model.eval()
+class ResNet50(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.transform = torchvision.models.ResNet50_Weights.IMAGENET1K_V2.transforms()
+        self.resnet = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+        self.resnet.fc = nn.Linear(in_features=2048, out_features=101)
+    
+    def forward(self, x):
+        x = self.resnet(x)
+        return x
 
-# การเตรียมข้อมูลก่อนป้อนให้โมเดล
-preprocess = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+@st.cache_resource
+def load_model():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = ResNet50()
+    model.load_state_dict(torch.load('resnet50.pth', map_location=device))
+    model.to(device)
+    model.eval()
+    return model, device
 
-# กำหนดคลาส (ตามที่ ImageNet ใช้)
-with open("imagenet_classes.txt") as f:
-    classes = [line.strip() for line in f.readlines()]
+def preprocess_image(image, input_height=224, input_width=224):
+    transform = transforms.Compose([
+        transforms.Resize((input_height, input_width)),
+        transforms.ToTensor(),
+    ])
+    tensor = transform(Image.fromarray(image)).unsqueeze(0)
+    return tensor
 
-# ฟังก์ชันในการทำนาย
-def predict(image):
-    img_tensor = preprocess(image).unsqueeze(0)
+# สร้างลิสต์ของ label สำหรับ 101 คลาส
+# หมายเหตุ: นี่เป็นเพียงตัวอย่าง คุณต้องแทนที่ด้วยรายการ label จริงของคุณ
+class_labels = ["กระดาษ ราคา/กก. 1-4 บาท", "ขวดแก้ว ราคา/กก. 0.25-3 บาท", "พลาสติกรวม ราคา/กก.  5-8 บาท", "พลาสติกใส ราคา/กก. 5-10 บาท", "เศษเหล็ก ราคา/กก. 6-12 บาท"]
+
+model, device = load_model()
+
+st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
+
+# Initialize the webcam
+cap = cv2.VideoCapture(0)
+
+# Create a placeholder for the video frame
+video_placeholder = st.empty()
+
+# Create a placeholder for the prediction
+prediction_placeholder = st.empty()
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        st.error("Failed to capture image from webcam.")
+        break
+    
+    # Convert BGR to RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+    # Display the video frame
+    video_placeholder.image(rgb_frame, channels="RGB", use_column_width=True)
+    
+    # Preprocess the frame
+    input_tensor = preprocess_image(rgb_frame)
+    
+    # Make prediction
     with torch.no_grad():
-        output = model(img_tensor)
-    _, predicted = torch.max(output, 1)
-    return classes[predicted.item()]
+        prediction = model(input_tensor.to(device))
+        _, predicted_class = torch.max(prediction, 1)
+    
+    # Get the predicted label
+    predicted_label = class_labels[predicted_class.item()]
+    
+    # Display the prediction with label
+    prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+    
+    # Check for 'q' key press to quit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
-# ฟังก์ชันสตรีมวิดีโอจากเว็บแคม
-def video_stream():
-    cap = cv2.VideoCapture(0)
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # แปลงภาพจาก BGR เป็น RGB
-        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-
-        # ทำการทำนาย
-        label = predict(image)
-
-        # แสดงผลการทำนายบนเฟรม
-        cv2.putText(frame, f"Predicted: {label}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-
-        # แสดงผลเฟรมใน Streamlit
-        st.image(frame, channels="BGR")
-
-        # ตรวจสอบว่า Streamlit ได้รับการหยุดหรือไม่
-        if st.button('Stop'):
-            break
-
-    cap.release()
-
-# ส่วนติดต่อผู้ใช้
-st.title("Real-time Object Detection with ResNet50")
-st.write("สตรีมวิดีโอจากเว็บแคมและทำนายวัตถุแบบเรียลไทม์")
-
-video_stream()
+# Release the webcam and close all windows
+cap.release()
+cv2.destroyAllWindows()
