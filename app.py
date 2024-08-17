@@ -1,7 +1,9 @@
 import streamlit as st
-from PIL import Image
+import cv2
 import torch
 from torchvision import models, transforms
+from PIL import Image
+import numpy as np
 
 # โหลดโมเดลที่เทรนไว้แล้ว
 @st.cache_resource
@@ -29,21 +31,43 @@ def predict(image, model):
 class_names = ['คลาสที่ 1', 'คลาสที่ 2', 'คลาสที่ 3', 'คลาสที่ 4', 'คลาสที่ 5']
 
 # สร้าง Streamlit app
-st.title("Image Classification with ResNet50")
+st.title("Real-Time Object Detection with ResNet50")
 
-# ตัวอัปโหลดไฟล์สำหรับอัปโหลดรูปภาพ
-uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
+# ตัวเลือกเปิดปิดกล้อง
+run = st.checkbox('Run camera')
 
-if uploaded_file is not None:
-    # แสดงรูปภาพที่อัปโหลด
-    image = Image.open(uploaded_file)
-    st.image(image, caption='Uploaded Image', use_column_width=True)
+# โหลดโมเดล
+model = load_model()
+
+# ฟังก์ชันสำหรับเปิดกล้อง
+if run:
+    # เปิดการใช้งานกล้อง
+    video_capture = cv2.VideoCapture(0)
     
-    # โหลดโมเดล
-    model = load_model()
+    stframe = st.empty()  # ตัวแปรสำหรับแสดงผลวิดีโอ
     
-    # ทำนายผล
-    class_id = predict(image, model)
-    
-    # แสดงผลลัพธ์
-    st.write(f"Predicted class: {class_names[class_id]}")
+    while run:
+        ret, frame = video_capture.read()
+        if not ret:
+            break
+
+        # เปลี่ยนสีจาก BGR (ของ OpenCV) เป็น RGB
+        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_rgb)
+
+        # ทำนายผล
+        class_id = predict(img_pil, model)
+        class_name = class_names[class_id]
+
+        # แสดงชื่อคลาสบนวิดีโอ
+        cv2.putText(frame, class_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        
+        # แสดงผลวิดีโอใน Streamlit
+        stframe.image(frame, channels="BGR")
+
+    video_capture.release()
+
+# ถ้าไม่เปิดกล้อง ให้แสดงข้อความปิดกล้อง
+else:
+    st.write("Camera is off. Check 'Run camera' to start.")
+
