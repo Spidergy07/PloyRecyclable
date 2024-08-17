@@ -5,6 +5,7 @@ from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
 import numpy as np
+import time
 
 class ResNet50(nn.Module):
     def __init__(self):
@@ -41,15 +42,24 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# ใช้ Streamlit สำหรับนำเข้าภาพจากกล้องเว็บแคม
-image = st.camera_input("Take a picture")
+# เริ่มต้น session state สำหรับเก็บภาพ
+if 'image' not in st.session_state:
+    st.session_state.image = None
+
+# ใช้ Streamlit's camera input สำหรับจับภาพจากกล้อง
+image = st.camera_input("ถ่ายภาพ")
 
 if image:
+    # อัปเดต session state ด้วยภาพใหม่
+    st.session_state.image = image
+
+# ประมวลผลและจำแนกประเภทภาพที่จับได้หากมีภาพ
+if st.session_state.image:
     # แปลงภาพเป็น NumPy array
-    image_np = np.array(Image.open(image))
+    image_np = np.array(Image.open(st.session_state.image))
     
-    # แสดงภาพ
-    st.image(image_np, caption='Captured Image', use_column_width=True)
+    # แสดงภาพที่จับได้
+    st.image(image_np, caption='ภาพที่จับได้', use_column_width=True)
     
     # ประมวลผลภาพ
     input_tensor = preprocess_image(image_np)
@@ -63,4 +73,7 @@ if image:
     predicted_label = class_labels[predicted_class.item()]
     
     # แสดงผลลัพธ์
-    st.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+    st.success(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
+
+# รีเฟรชหน้าเพื่อเช็คภาพใหม่ ๆ ทุกๆ 2 วินาที
+time.sleep(2)
