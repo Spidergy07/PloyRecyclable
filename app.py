@@ -2,10 +2,11 @@ import streamlit as st
 import torch
 from torchvision import models, transforms
 from PIL import Image
+import cv2
+import numpy as np
 
-# โหลดโมเดล ResNet50
-model = models.resnet50()
-model.load_state_dict(torch.load("resnet50.pth", map_location=torch.device('cpu')))
+# โหลดโมเดล ResNet50 แบบ pretrained
+model = models.resnet50(pretrained=True)
 model.eval()
 
 # การเตรียมข้อมูลก่อนป้อนให้โมเดล
@@ -16,8 +17,9 @@ preprocess = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-# กำหนดคลาส (คุณสามารถแก้ไขได้ตามความเหมาะสม)
-classes = ['แมว', 'สุนัข', 'ม้า', 'ช้าง', 'นก', 'แมลง', 'ปลา', 'เต่า']
+# กำหนดคลาส (ตามที่ ImageNet ใช้)
+with open("imagenet_classes.txt") as f:
+    classes = [line.strip() for line in f.readlines()]
 
 # ฟังก์ชันในการทำนาย
 def predict(image):
@@ -27,16 +29,35 @@ def predict(image):
     _, predicted = torch.max(output, 1)
     return classes[predicted.item()]
 
+# ฟังก์ชันสตรีมวิดีโอจากเว็บแคม
+def video_stream():
+    cap = cv2.VideoCapture(0)
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # แปลงภาพจาก BGR เป็น RGB
+        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+        # ทำการทำนาย
+        label = predict(image)
+
+        # แสดงผลการทำนายบนเฟรม
+        cv2.putText(frame, f"Predicted: {label}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
+        # แสดงผลเฟรมใน Streamlit
+        st.image(frame, channels="BGR")
+
+        # ตรวจสอบว่า Streamlit ได้รับการหยุดหรือไม่
+        if st.button('Stop'):
+            break
+
+    cap.release()
+
 # ส่วนติดต่อผู้ใช้
-st.title("Image Classification with ResNet50")
-st.write("อัปโหลดภาพและรับผลการทำนาย")
+st.title("Real-time Object Detection with ResNet50")
+st.write("สตรีมวิดีโอจากเว็บแคมและทำนายวัตถุแบบเรียลไทม์")
 
-uploaded_file = st.file_uploader("Choose an image...", type="jpg")
-
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption='Uploaded Image.', use_column_width=True)
-    st.write("")
-    st.write("Predicting...")
-    label = predict(image)
-    st.write(f"Predicted class: {label}")
+video_stream()
