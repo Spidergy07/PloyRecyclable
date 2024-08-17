@@ -1,12 +1,11 @@
 import streamlit as st
+import cv2
 import torch
 import torchvision
 from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
 import numpy as np
-import cv2
-import time
 
 class ResNet50(nn.Module):
     def __init__(self):
@@ -33,7 +32,8 @@ def preprocess_image(image, input_height=224, input_width=224):
         transforms.Resize((input_height, input_width)),
         transforms.ToTensor(),
     ])
-    tensor = transform(Image.fromarray(image)).unsqueeze(0)
+    image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    tensor = transform(image).unsqueeze(0)
     return tensor
 
 # สร้างลิสต์ของ label สำหรับ 101 คลาส
@@ -43,25 +43,20 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# เริ่มสตรีมวิดีโอ
-video_stream = st.empty()
-
-# สร้าง placeholder สำหรับแสดงผลการคาดการณ์
-prediction_text = st.empty()
-
 # เริ่มการจับภาพวิดีโอ
 cap = cv2.VideoCapture(0)
+
+# สร้าง placeholder สำหรับแสดงวิดีโอและผลการทำนาย
+video_placeholder = st.empty()
+prediction_placeholder = st.empty()
 
 while True:
     ret, frame = cap.read()
     if not ret:
         break
     
-    # แปลง BGR เป็น RGB
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    
     # ประมวลผลภาพ
-    input_tensor = preprocess_image(frame_rgb)
+    input_tensor = preprocess_image(frame)
     
     # ทำการคาดการณ์
     with torch.no_grad():
@@ -76,13 +71,10 @@ while True:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     
     # แสดงเฟรมในสตรีมวิดีโอ
-    video_stream.image(frame, channels="BGR")
+    video_placeholder.image(frame, channels="BGR")
     
     # อัปเดตข้อความการคาดการณ์
-    prediction_text.text(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
-    
-    # รอสักครู่เพื่อลดการใช้ทรัพยากร
-    time.sleep(0.1)
+    prediction_placeholder.text(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
 
 # ปิดการจับภาพเมื่อเสร็จสิ้น
 cap.release()
