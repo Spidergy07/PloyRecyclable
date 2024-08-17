@@ -42,25 +42,17 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# เริ่มการจับภาพวิดีโอ
-cap = cv2.VideoCapture(0)
-
 # สร้าง placeholder สำหรับแสดงวิดีโอและผลการทำนาย
 video_placeholder = st.empty()
 prediction_placeholder = st.empty()
 
-# เพิ่มปุ่มเริ่มและหยุดการตรวจจับ
-start_button = st.button("เริ่มการตรวจจับ")
-stop_button = st.button("หยุดการตรวจจับ")
+# เริ่มการจับภาพวิดีโอ
+cap = cv2.VideoCapture(0)
 
-run = False
-
-if start_button:
-    run = True
-
-while run:
+while True:
     ret, frame = cap.read()
     if not ret:
+        st.write("ไม่สามารถเข้าถึงกล้องได้")
         break
     
     # ประมวลผลภาพ
@@ -83,10 +75,6 @@ while run:
     
     # อัปเดตข้อความการคาดการณ์
     prediction_placeholder.text(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
-
-    if stop_button:
-        run = False
-        break
 
 # ปิดการจับภาพเมื่อเสร็จสิ้น
 cap.release()
