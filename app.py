@@ -40,13 +40,10 @@ st.title('การจำแนกภาพด้วย ResNet50')
 # เปิดกล้อง
 cap = cv2.VideoCapture(0)
 
-# สร้าง placeholder สำหรับแสดงภาพจากกล้อง
+# สร้าง placeholder สำหรับแสดงภาพจากกล้องและผลลัพธ์การทำนาย
 camera_placeholder = st.empty()
 
-# สร้าง placeholder สำหรับแสดงผลการทำนาย
-prediction_placeholder = st.empty()
-
-while True:
+while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         st.write("ไม่สามารถเปิดกล้องได้")
@@ -56,12 +53,11 @@ while True:
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     pil_image = Image.fromarray(frame_rgb)
     
-    # แสดงภาพจากกล้อง
-    camera_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
-    
-    # ทำนายและแสดงผล
+    # ทำนายผล
     prediction = predict(pil_image)
-    prediction_placeholder.write(f"ผลการทำนาย: {prediction}")
+    
+    # แสดงภาพจากกล้องและผลลัพธ์การทำนาย
+    camera_placeholder.image(frame_rgb, caption=f"Predicted class: {prediction}", channels="RGB", use_column_width=True)
     
     # ตรวจสอบการกดปุ่ม 'q' เพื่อออกจากลูป
     if cv2.waitKey(1) & 0xFF == ord('q'):
