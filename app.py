@@ -1,12 +1,11 @@
 import streamlit as st
+import cv2
 import torch
 import torchvision
 from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
-import cv2
 import numpy as np
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 
 class ResNet50(nn.Module):
     def __init__(self):
@@ -33,6 +32,7 @@ def preprocess_image(image, input_height=224, input_width=224):
         transforms.Resize((input_height, input_width)),
         transforms.ToTensor(),
     ])
+    image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     tensor = transform(image).unsqueeze(0)
     return tensor
 
@@ -40,38 +40,53 @@ class_labels = ["กระดาษ ราคา/กก. 1-4 บาท", "ขว
 
 model, device = load_model()
 
-class VideoTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.model = model
-        self.device = device
-
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(img_rgb)
-        
-        input_tensor = preprocess_image(pil_image)
-        
-        with torch.no_grad():
-            prediction = self.model(input_tensor.to(self.device))
-            _, predicted_class = torch.max(prediction, 1)
-        
-        predicted_label = class_labels[predicted_class.item()]
-        
-        cv2.putText(img, f'Class: {predicted_class.item()} - {predicted_label}', (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        return img
-
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-ctx = webrtc_streamer(
-    key="example",
-    video_transformer_factory=VideoTransformer,
-    rtc_configuration=RTCConfiguration(
-        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-    )
-)
+# เริ่มการจับภาพวิดีโอ
+cap = cv2.VideoCapture(0)
 
-if ctx.video_transformer:
-    st.write(f"Last prediction: {ctx.video_transformer.last_prediction}")
+# สร้าง placeholder สำหรับแสดงวิดีโอและผลการทำนาย
+video_placeholder = st.empty()
+prediction_placeholder = st.empty()
+
+# เพิ่มปุ่มเริ่มและหยุดการตรวจจับ
+start_button = st.button("เริ่มการตรวจจับ")
+stop_button = st.button("หยุดการตรวจจับ")
+
+run = False
+
+if start_button:
+    run = True
+
+while run:
+    ret, frame = cap.read()
+    if not ret:
+        break
+    
+    # ประมวลผลภาพ
+    input_tensor = preprocess_image(frame)
+    
+    # ทำการคาดการณ์
+    with torch.no_grad():
+        prediction = model(input_tensor.to(device))
+        _, predicted_class = torch.max(prediction, 1)
+    
+    # รับ label ที่คาดการณ์
+    predicted_label = class_labels[predicted_class.item()]
+    
+    # วาดข้อความบนเฟรม
+    cv2.putText(frame, f'Class: {predicted_class.item()} - {predicted_label}', (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    
+    # แสดงเฟรมในสตรีมวิดีโอ
+    video_placeholder.image(frame, channels="BGR")
+    
+    # อัปเดตข้อความการคาดการณ์
+    prediction_placeholder.text(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
+
+    if stop_button:
+        run = False
+        break
+
+# ปิดการจับภาพเมื่อเสร็จสิ้น
+cap.release()
