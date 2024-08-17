@@ -4,7 +4,6 @@ import torchvision
 from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
-import cv2
 import numpy as np
 
 class ResNet50(nn.Module):
@@ -36,52 +35,32 @@ def preprocess_image(image, input_height=224, input_width=224):
     return tensor
 
 # สร้างลิสต์ของ label สำหรับ 101 คลาส
-# หมายเหตุ: นี่เป็นเพียงตัวอย่าง คุณต้องแทนที่ด้วยรายการ label จริงของคุณ
 class_labels = ["กระดาษ ราคา/กก. 1-4 บาท", "ขวดแก้ว ราคา/กก. 0.25-3 บาท", "พลาสติกรวม ราคา/กก.  5-8 บาท", "พลาสติกใส ราคา/กก. 5-10 บาท", "เศษเหล็ก ราคา/กก. 6-12 บาท"]
 
 model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Initialize the webcam
-cap = cv2.VideoCapture(0)
+# ใช้ streamlit เพื่อนำเข้าภาพจากกล้องเว็บแคม
+image = st.camera_input("Take a picture")
 
-# Create a placeholder for the video frame
-video_placeholder = st.empty()
-
-# Create a placeholder for the prediction
-prediction_placeholder = st.empty()
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        st.error("Failed to capture image from webcam.")
-        break
+if image:
+    # แปลงภาพเป็น NumPy array
+    image_np = np.array(Image.open(image))
     
-    # Convert BGR to RGB
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-    # Display the video frame
-    video_placeholder.image(rgb_frame, channels="RGB", use_column_width=True)
+    # แสดงภาพ
+    st.image(image_np, caption='Captured Image', use_column_width=True)
     
-    # Preprocess the frame
-    input_tensor = preprocess_image(rgb_frame)
+    # ประมวลผลภาพ
+    input_tensor = preprocess_image(image_np)
     
-    # Make prediction
+    # ทำการคาดการณ์
     with torch.no_grad():
         prediction = model(input_tensor.to(device))
         _, predicted_class = torch.max(prediction, 1)
     
-    # Get the predicted label
+    # รับ label ที่คาดการณ์
     predicted_label = class_labels[predicted_class.item()]
     
-    # Display the prediction with label
-    prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
-    
-    # Check for 'q' key press to quit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Release the webcam and close all windows
-cap.release()
-cv2.destroyAllWindows()
+    # แสดงผลลัพธ์
+    st.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
