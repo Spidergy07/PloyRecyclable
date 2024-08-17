@@ -1,9 +1,9 @@
 import streamlit as st
-import cv2
 import torch
 from torchvision import models, transforms
-from PIL import Image
+import cv2
 import numpy as np
+from PIL import Image
 
 # โหลดโมเดลที่เทรนไว้แล้ว
 @st.cache_resource
@@ -31,43 +31,37 @@ def predict(image, model):
 class_names = ['คลาสที่ 1', 'คลาสที่ 2', 'คลาสที่ 3', 'คลาสที่ 4', 'คลาสที่ 5']
 
 # สร้าง Streamlit app
-st.title("Real-Time Object Detection with ResNet50")
-
-# ตัวเลือกเปิดปิดกล้อง
-run = st.checkbox('Run camera')
+st.title("Real-time Object Detection with ResNet50")
 
 # โหลดโมเดล
 model = load_model()
 
-# ฟังก์ชันสำหรับเปิดกล้อง
-if run:
-    # เปิดการใช้งานกล้อง
-    video_capture = cv2.VideoCapture(0)
+# เริ่มการทำงานของกล้อง
+run = st.checkbox('Start Webcam')
+FRAME_WINDOW = st.image([])
+
+cap = cv2.VideoCapture(0)
+
+while run:
+    ret, frame = cap.read()
+    if not ret:
+        st.write("Failed to grab frame")
+        break
     
-    stframe = st.empty()  # ตัวแปรสำหรับแสดงผลวิดีโอ
+    # แปลงภาพจาก BGR (ที่ opencv ใช้) เป็น RGB (ที่ PIL ใช้)
+    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
-    while run:
-        ret, frame = video_capture.read()
-        if not ret:
-            break
-
-        # เปลี่ยนสีจาก BGR (ของ OpenCV) เป็น RGB
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(img_rgb)
-
-        # ทำนายผล
-        class_id = predict(img_pil, model)
-        class_name = class_names[class_id]
-
-        # แสดงชื่อคลาสบนวิดีโอ
-        cv2.putText(frame, class_name, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-        
-        # แสดงผลวิดีโอใน Streamlit
-        stframe.image(frame, channels="BGR")
-
-    video_capture.release()
-
-# ถ้าไม่เปิดกล้อง ให้แสดงข้อความปิดกล้อง
+    # แปลงจาก numpy array เป็น PIL Image
+    pil_img = Image.fromarray(img_rgb)
+    
+    # ทำนายผล
+    class_id = predict(pil_img, model)
+    
+    # วาดข้อความผลลัพธ์ลงบนภาพ
+    cv2.putText(frame, f'Predicted: {class_names[class_id]}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    
+    # แสดงภาพ
+    FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 else:
-    st.write("Camera is off. Check 'Run camera' to start.")
-
+    cap.release()
+    cv2.destroyAllWindows()
