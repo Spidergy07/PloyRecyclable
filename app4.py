@@ -1,10 +1,12 @@
 import streamlit as st
+import cv2
+import tempfile
+import numpy as np
+from PIL import Image
 import torch
 import torchvision
 from torchvision import transforms
-from PIL import Image
 import torch.nn as nn
-import numpy as np
 
 # Define the model
 class ResNet50(nn.Module):
@@ -42,26 +44,56 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Capture image from webcam
-image = st.camera_input("Capture Image")
+# Create a temporary file to store the video
+tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+video_path = tfile.name
 
-if image:
-    # Convert to PIL Image
-    pil_image = Image.open(image)
-    
-    # Display the captured image
-    st.image(pil_image, caption='Captured Image', use_column_width=True)
-    
-    # Preprocess the image for model input
+# Start capturing video
+cap = cv2.VideoCapture(0)
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+out = cv2.VideoWriter(video_path, fourcc, 20.0, (640, 480))
+
+stframe = st.empty()
+prediction_placeholder = st.empty()
+
+stop_button = st.button("Stop Webcam")
+
+while not stop_button:
+    ret, frame = cap.read()
+    if not ret:
+        st.error("Failed to capture image from webcam.")
+        break
+
+    # Write the frame into the video file
+    out.write(frame)
+
+    # Convert BGR to RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    # Convert the image to a PIL Image
+    pil_image = Image.fromarray(rgb_frame)
+
+    # Preprocess the frame for model input
     input_tensor = preprocess_image(pil_image)
-    
+
     # Make prediction
     with torch.no_grad():
         prediction = model(input_tensor.to(device))
         _, predicted_class = torch.max(prediction, 1)
-    
+
     # Get the predicted label
     predicted_label = class_labels[predicted_class.item()]
-    
-    # Display the prediction with label
-    st.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+
+    # Display the video frame
+    stframe.image(pil_image, caption=f'Predicted class: {predicted_class.item()} - {predicted_label}', use_column_width=True)
+
+    # Check for stop button
+    if st.button("Stop Webcam"):
+        break
+
+cap.release()
+out.release()
+cv2.destroyAllWindows()
+
+# Display the recorded video
+st.video(video_path)
