@@ -1,14 +1,13 @@
 import streamlit as st
 import cv2
-import numpy as np
-from PIL import Image
 import torch
 import torchvision
 from torchvision import transforms
+from PIL import Image
 import torch.nn as nn
-import tempfile
+import numpy as np
+import time
 
-# Define the model
 class ResNet50(nn.Module):
     def __init__(self):
         super().__init__()
@@ -37,59 +36,50 @@ def preprocess_image(image, input_height=224, input_width=224):
     tensor = transform(image).unsqueeze(0)
     return tensor
 
-# Example class labels (adjust as needed)
+# สร้างลิสต์ของ label สำหรับ 101 คลาส
 class_labels = ["กระดาษ ราคา/กก. 1-4 บาท", "ขวดแก้ว ราคา/กก. 0.25-3 บาท", "พลาสติกรวม ราคา/กก.  5-8 บาท", "พลาสติกใส ราคา/กก. 5-10 บาท", "เศษเหล็ก ราคา/กก. 6-12 บาท"]
 
 model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Create an empty placeholder
-video_placeholder = st.empty()
-prediction_placeholder = st.empty()
-
-# Initialize the webcam
+# เปิดกล้องเว็บแคม
 cap = cv2.VideoCapture(0)
 
-# Check if the webcam is opened successfully
+# ตรวจสอบว่ากล้องเปิดได้หรือไม่
 if not cap.isOpened():
-    st.error("Unable to access the webcam.")
+    st.error("ไม่สามารถเปิดกล้องได้")
 else:
-    st.write("Webcam is connected.")
+    stframe = st.empty()
+    prediction_placeholder = st.empty()
 
-# Create a stop button
-stop_button = st.button("Stop Webcam")
-
-while not stop_button:
-    ret, frame = cap.read()
-    if not ret:
-        st.error("Failed to capture image from webcam.")
-        break
-    
-    # Convert BGR to RGB
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    
-    # Convert the image to a PIL Image
-    pil_image = Image.fromarray(rgb_frame)
-    
-    # Display the video frame
-    video_placeholder.image(pil_image, caption='Webcam Feed', use_column_width=True)
-    
-    # Preprocess the frame for model input
-    input_tensor = preprocess_image(pil_image)
-    
-    # Make prediction
-    with torch.no_grad():
-        prediction = model(input_tensor.to(device))
-        _, predicted_class = torch.max(prediction, 1)
-    
-    # Get the predicted label
-    predicted_label = class_labels[predicted_class.item()]
-    
-    # Display the prediction with label
-    prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
-    
-    # Update stop button
-    stop_button = st.button("Stop Webcam")
-
-cap.release()
+    while True:
+        # อ่านภาพจากกล้อง
+        ret, frame = cap.read()
+        if not ret:
+            st.error("ไม่สามารถอ่านภาพจากกล้องได้")
+            break
+        
+        # แสดงภาพที่ดึงจากกล้อง
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        stframe.image(frame_rgb, channels="RGB")
+        
+        # ประมวลผลภาพ
+        pil_img = Image.fromarray(frame_rgb)
+        input_tensor = preprocess_image(pil_img)
+        
+        # ทำการคาดการณ์
+        with torch.no_grad():
+            prediction = model(input_tensor.to(device))
+            _, predicted_class = torch.max(prediction, 1)
+        
+        # รับ label ที่คาดการณ์
+        predicted_label = class_labels[predicted_class.item()]
+        
+        # แสดงผลลัพธ์ (อัปเดตข้อมูลล่าสุด)
+        prediction_placeholder.success(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
+        
+        # หน่วงเวลาเล็กน้อยเพื่อควบคุมความเร็วในการรีเฟรช
+        time.sleep(0.1)
+        
+    cap.release()
