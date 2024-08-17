@@ -4,15 +4,15 @@ import torchvision
 from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
+import cv2
 import numpy as np
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 
 class ResNet50(nn.Module):
     def __init__(self):
         super().__init__()
         self.transform = torchvision.models.ResNet50_Weights.IMAGENET1K_V2.transforms()
         self.resnet = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
-        self.resnet.fc = nn.Linear(in_features=2048, out_features=101)
+        self.resnet.fc = nn.Linear(in_features=2048, out_features=5)
         
     def forward(self, x):
         x = self.resnet(x)
@@ -35,44 +35,34 @@ def preprocess_image(image, input_height=224, input_width=224):
     tensor = transform(image).unsqueeze(0)
     return tensor
 
-class_labels = ["กระดาษ ราคา/กก. 1-4 บาท", "ขวดแก้ว ราคา/กก. 0.25-3 บาท", "พลาสติกรวม ราคา/กก.  5-8 บาท", "พลาสติกใส ราคา/กก. 5-10 บาท", "เศษเหล็ก ราคา/กก. 6-12 บาท"]
+class_labels = ["กระดาษ", "ขวดแก้ว", "พลาสติกรวม", "พลาสติกใส", "เศษเหล็ก"]
 
 model, device = load_model()
 
-class VideoTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.model = model
-        self.device = device
+st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น')
 
-    def transform(self, frame):
-        img = frame.to_ndarray(format="rgb24")
-        pil_image = Image.fromarray(img)
-        
-        input_tensor = preprocess_image(pil_image)
-        
-        with torch.no_grad():
-            prediction = self.model(input_tensor.to(self.device))
-            _, predicted_class = torch.max(prediction, 1)
-        
-        predicted_label = class_labels[predicted_class.item()]
-        
-        return img, predicted_label
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
-
-ctx = webrtc_streamer(
-    key="example",
-    video_transformer_factory=VideoTransformer,
-    rtc_configuration=RTCConfiguration(
-        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-    )
-)
-
-if ctx.video_transformer:
-    prediction_placeholder = st.empty()
-    while True:
-        try:
-            _, prediction = ctx.video_transformer.transform(ctx.video_frame)
-            prediction_placeholder.write(f"ผลการทำนาย: {prediction}")
-        except:
-            continue
+if uploaded_file is not None:
+    image = Image.open(uploaded_file)
+    st.image(image, caption='Uploaded Image', use_column_width=True)
+    
+    input_tensor = preprocess_image(image)
+    
+    with torch.no_grad():
+        prediction = model(input_tensor.to(device))
+        _, predicted_class = torch.max(prediction, 1)
+    
+    predicted_label = class_labels[predicted_class.item()]
+    
+    # Convert PIL Image to OpenCV format
+    img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    
+    # Add prediction text to image
+    cv2.putText(img_cv, f"Predicted class: {predicted_label}", (10, 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    
+    # Convert back to RGB for Streamlit display
+    img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+    
+    st.image(img_rgb, caption='Processed Image with Prediction', use_column_width=True)
