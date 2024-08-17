@@ -1,67 +1,95 @@
 import streamlit as st
 import torch
-from torchvision import models, transforms
+import torchvision
+from torchvision import transforms
+from PIL import Image
+import torch.nn as nn
 import cv2
 import numpy as np
-from PIL import Image
 
-# โหลดโมเดลที่เทรนไว้แล้ว
+class ResNet50(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.transform = torchvision.models.ResNet50_Weights.IMAGENET1K_V2.transforms()
+        self.resnet = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+        self.resnet.fc = nn.Linear(in_features=2048, out_features=101)
+    
+    def forward(self, x):
+        x = self.resnet(x)
+        return x
+
 @st.cache_resource
 def load_model():
-    model = models.resnet50()
-    model.fc = torch.nn.Linear(model.fc.in_features, 5)  # เปลี่ยน output layer สำหรับ 5 คลาส
-    model.load_state_dict(torch.load("resnet50.pth", map_location=torch.device('cpu')))
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = ResNet50()
+    model.load_state_dict(torch.load('resnet50.pth', map_location=device))
+    model.to(device)
     model.eval()
-    return model
+    return model, device
 
-# ฟังก์ชันสำหรับการพยากรณ์
-def predict(image, model):
+def preprocess_image(image, input_height=224, input_width=224):
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((input_height, input_width)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-    img = transform(image).unsqueeze(0)  # เพิ่ม batch dimension
-    with torch.no_grad():
-        outputs = model(img)
-    _, predicted = outputs.max(1)
-    return predicted.item()
+    tensor = transform(image).unsqueeze(0)
+    return tensor
 
-# ชื่อคลาส (แก้ไขให้ตรงกับคลาสของคุณ)
-class_names = ['คลาสที่ 1', 'คลาสที่ 2', 'คลาสที่ 3', 'คลาสที่ 4', 'คลาสที่ 5']
+# Example class labels (adjust as needed)
+class_labels = ["กระดาษ ราคา/กก. 1-4 บาท", "ขวดแก้ว ราคา/กก. 0.25-3 บาท", "พลาสติกรวม ราคา/กก.  5-8 บาท", "พลาสติกใส ราคา/กก. 5-10 บาท", "เศษเหล็ก ราคา/กก. 6-12 บาท"]
 
-# สร้าง Streamlit app
-st.title("Real-time Object Detection with ResNet50")
+model, device = load_model()
 
-# โหลดโมเดล
-model = load_model()
+st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# เริ่มการทำงานของกล้อง
-run = st.checkbox('Start Webcam')
-FRAME_WINDOW = st.image([])
+# Button to start webcam
+start_button = st.button("Start Webcam", key="start_button")
 
-cap = cv2.VideoCapture(0)
+# Button to stop webcam
+stop_button = st.button("Stop Webcam", key="stop_button")
 
-while run:
-    ret, frame = cap.read()
-    if not ret:
-        st.write("Failed to grab frame")
-        break
-    
-    # แปลงภาพจาก BGR (ที่ opencv ใช้) เป็น RGB (ที่ PIL ใช้)
-    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    
-    # แปลงจาก numpy array เป็น PIL Image
-    pil_img = Image.fromarray(img_rgb)
-    
-    # ทำนายผล
-    class_id = predict(pil_img, model)
-    
-    # วาดข้อความผลลัพธ์ลงบนภาพ
-    cv2.putText(frame, f'Predicted: {class_names[class_id]}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    
-    # แสดงภาพ
-    FRAME_WINDOW.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-else:
+if start_button:
+    cap = cv2.VideoCapture(0)
+    video_placeholder = st.empty()
+    prediction_placeholder = st.empty()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            st.error("Failed to capture image from webcam.")
+            break
+        
+        # Convert BGR to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Convert the image to a PIL Image
+        pil_image = Image.fromarray(rgb_frame)
+        
+        # Display the video frame
+        video_placeholder.image(pil_image, channels="RGB", use_column_width=True)
+        
+        # Preprocess the frame
+        input_tensor = preprocess_image(pil_image)
+        
+        # Make prediction
+        with torch.no_grad():
+            prediction = model(input_tensor.to(device))
+            _, predicted_class = torch.max(prediction, 1)
+        
+        # Get the predicted label
+        predicted_label = class_labels[predicted_class.item()]
+        
+        # Display the prediction with label
+        prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+        
+        # Break loop if stop button is pressed
+        if stop_button:
+            cap.release()
+            break
+
+    if not stop_button:
+        cap.release()
+
+# Release the webcam when the application exits or when the stop button is pressed
+if cap.isOpened():
     cap.release()
-    cv2.destroyAllWindows()
