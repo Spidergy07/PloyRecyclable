@@ -79,7 +79,7 @@ else:
         # แสดงผลลัพธ์ (อัปเดตข้อมูลล่าสุด)
         prediction_placeholder.success(f'คลาสที่คาดการณ์: {predicted_class.item()} - {predicted_label}')
         
-        # หน่วงเวลาเล็กน้อยเพื่อควบคุมความเร็วในการรีเฟรช
-        time.sleep(0.1)
+        # หน่วงเวลาสั้นที่สุดเท่าที่จะเป็นไปได้เพื่อควบคุมความเร็วในการรีเฟรช
+        time.sleep(0.05)
         
     cap.release()
