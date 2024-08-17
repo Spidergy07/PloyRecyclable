@@ -1,12 +1,13 @@
 import streamlit as st
+import cv2
+import numpy as np
+from PIL import Image
 import torch
 import torchvision
 from torchvision import transforms
-from PIL import Image
 import torch.nn as nn
-import numpy as np
-import io
 
+# Define the model
 class ResNet50(nn.Module):
     def __init__(self):
         super().__init__()
@@ -42,17 +43,37 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Camera input for capturing image
-captured_image = st.camera_input("Take a picture")
+# Create a placeholder for video stream
+video_placeholder = st.empty()
+prediction_placeholder = st.empty()
 
-if captured_image is not None:
-    # Load the image from the camera
-    pil_image = Image.open(captured_image).convert("RGB")
+# Initialize the webcam
+cap = cv2.VideoCapture(0)
 
-    # Display the captured image
-    st.image(pil_image, caption="Captured Image", use_column_width=True)
+if not cap.isOpened():
+    st.error("Unable to access the webcam.")
+else:
+    st.write("Webcam is connected.")
 
-    # Preprocess the image
+# Create a stop button
+stop_button = st.button("Stop Webcam")
+
+while not stop_button:
+    ret, frame = cap.read()
+    if not ret:
+        st.error("Failed to capture image from webcam.")
+        break
+
+    # Convert BGR to RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    # Convert the image to a PIL Image
+    pil_image = Image.fromarray(rgb_frame)
+
+    # Display the video frame
+    video_placeholder.image(pil_image, caption='Webcam Feed', use_column_width=True)
+
+    # Preprocess the frame for model input
     input_tensor = preprocess_image(pil_image)
 
     # Make prediction
@@ -64,4 +85,10 @@ if captured_image is not None:
     predicted_label = class_labels[predicted_class.item()]
 
     # Display the prediction with label
-    st.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+    prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
+    
+    # Check for stop button
+    stop_button = st.button("Stop Webcam")
+
+cap.release()
+cv2.destroyAllWindows()
