@@ -1,73 +1,72 @@
 import streamlit as st
 import cv2
 import torch
-import torchvision
-from torchvision import transforms
+import torchvision.transforms as transforms
+from torchvision.models import resnet50
 from PIL import Image
-import torch.nn as nn
 import numpy as np
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
 
-class ResNet50(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.transform = torchvision.models.ResNet50_Weights.IMAGENET1K_V2.transforms()
-        self.resnet = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
-        self.resnet.fc = nn.Linear(in_features=2048, out_features=5)
-        
-    def forward(self, x):
-        x = self.resnet(x)
-        return x
-
+# โหลดโมเดล
 @st.cache_resource
 def load_model():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = ResNet50()
-    model.load_state_dict(torch.load('resnet50.pth', map_location=device))
-    model.to(device)
+    model = resnet50()
+    model.fc = torch.nn.Linear(model.fc.in_features, 5)  # ปรับเป็น 5 คลาส
+    model.load_state_dict(torch.load('resnet50.pth', map_location=torch.device('cpu')))
     model.eval()
-    return model, device
+    return model
 
-def preprocess_image(image, input_height=224, input_width=224):
+model = load_model()
+
+# กำหนดคลาส
+class_names = ['คลาส1', 'คลาส2', 'คลาส3', 'คลาส4', 'คลาส5']
+
+# ฟังก์ชันสำหรับทำนาย
+def predict(image):
     transform = transforms.Compose([
-        transforms.Resize((input_height, input_width)),
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
         transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-    tensor = transform(image).unsqueeze(0)
-    return tensor
+    image = transform(image).unsqueeze(0)
+    with torch.no_grad():
+        outputs = model(image)
+        _, predicted = torch.max(outputs, 1)
+    return class_names[predicted.item()]
 
-class_labels = ["กระดาษ", "ขวดแก้ว", "พลาสติกรวม", "พลาสติกใส", "เศษเหล็ก"]
+# Streamlit app
+st.title('การจำแนกภาพด้วย ResNet50')
 
-model, device = load_model()
+# เปิดกล้อง
+cap = cv2.VideoCapture(0)
 
-class VideoTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.model = model
-        self.device = device
+# สร้าง placeholder สำหรับแสดงภาพจากกล้อง
+camera_placeholder = st.empty()
 
-    def transform(self, frame):
-        img = frame.to_ndarray(format="rgb24")
-        pil_image = Image.fromarray(img)
-        
-        input_tensor = preprocess_image(pil_image)
-        
-        with torch.no_grad():
-            prediction = self.model(input_tensor.to(self.device))
-            _, predicted_class = torch.max(prediction, 1)
-        
-        predicted_label = class_labels[predicted_class.item()]
-        
-        cv2.putText(img, f"Predicted class: {predicted_label}", (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        
-        return img
+# สร้าง placeholder สำหรับแสดงผลการทำนาย
+prediction_placeholder = st.empty()
 
-st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น')
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        st.write("ไม่สามารถเปิดกล้องได้")
+        break
+    
+    # แปลงภาพให้เป็นรูปแบบที่ถูกต้อง
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(frame_rgb)
+    
+    # แสดงภาพจากกล้อง
+    camera_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
+    
+    # ทำนายและแสดงผล
+    prediction = predict(pil_image)
+    prediction_placeholder.write(f"ผลการทำนาย: {prediction}")
+    
+    # ตรวจสอบการกดปุ่ม 'q' เพื่อออกจากลูป
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
-webrtc_streamer(
-    key="example",
-    video_transformer_factory=VideoTransformer,
-    rtc_configuration=RTCConfiguration(
-        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-    )
-)
+# ปิดกล้องและหน้าต่าง
+cap.release()
+cv2.destroyAllWindows()
