@@ -45,7 +45,7 @@ numpy==1.26.4
 opt-einsum==3.3.0
 optree==0.12.1
 packaging
-pillow==9.5.0
+pillow==8.0.0
 protobuf==4.25.4
 pydantic==2.8.2
 pydantic_core==2.20.1
