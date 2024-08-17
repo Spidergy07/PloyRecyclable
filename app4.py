@@ -1,12 +1,12 @@
 import streamlit as st
 import cv2
-import tempfile
 import numpy as np
 from PIL import Image
 import torch
 import torchvision
 from torchvision import transforms
 import torch.nn as nn
+import tempfile
 
 # Define the model
 class ResNet50(nn.Module):
@@ -93,7 +93,6 @@ while not stop_button:
 
 cap.release()
 out.release()
-cv2.destroyAllWindows()
 
 # Display the recorded video
 st.video(video_path)
