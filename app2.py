@@ -4,7 +4,6 @@ import torchvision
 from torchvision import transforms
 from PIL import Image
 import torch.nn as nn
-import cv2
 import numpy as np
 
 class ResNet50(nn.Module):
@@ -42,48 +41,26 @@ model, device = load_model()
 
 st.title('การแยกประเภทขยะรีไซเคิลเบื้องต้น โดยแสดงผลประเภทขยะรีไซเคิลและช่วงราคาต่อกิโลกรัม')
 
-# Button to start webcam
-start_button = st.button("Start Webcam", key="start_button")
+# Upload an image file
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-if start_button:
-    cap = cv2.VideoCapture(0)
-    video_placeholder = st.empty()
-    prediction_placeholder = st.empty()
+if uploaded_file is not None:
+    # Load the image
+    pil_image = Image.open(uploaded_file).convert("RGB")
 
-    stop_button = st.button("Stop Webcam", key="stop_button")
-    
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Failed to capture image from webcam.")
-            break
-        
-        # Convert BGR to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Convert the image to a PIL Image
-        pil_image = Image.fromarray(rgb_frame)
-        
-        # Display the video frame
-        video_placeholder.image(pil_image, channels="RGB", use_column_width=True)
-        
-        # Preprocess the frame for model input
-        input_tensor = preprocess_image(pil_image)
-        
-        # Make prediction
-        with torch.no_grad():
-            prediction = model(input_tensor.to(device))
-            _, predicted_class = torch.max(prediction, 1)
-        
-        # Get the predicted label
-        predicted_label = class_labels[predicted_class.item()]
-        
-        # Display the prediction with label
-        prediction_placeholder.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
-        
-        # Stop webcam when button is pressed
-        if stop_button:
-            break
-    
-    cap.release()
-    cv2.destroyAllWindows()
+    # Display the uploaded image
+    st.image(pil_image, caption="Uploaded Image", use_column_width=True)
+
+    # Preprocess the image
+    input_tensor = preprocess_image(pil_image)
+
+    # Make prediction
+    with torch.no_grad():
+        prediction = model(input_tensor.to(device))
+        _, predicted_class = torch.max(prediction, 1)
+
+    # Get the predicted label
+    predicted_label = class_labels[predicted_class.item()]
+
+    # Display the prediction with label
+    st.success(f'Predicted class: {predicted_class.item()} - {predicted_label}')
